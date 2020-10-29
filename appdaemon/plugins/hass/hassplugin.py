@@ -1,6 +1,7 @@
 import asyncio
 import json
 import ssl
+from time import time
 import websocket
 import traceback
 import aiohttp
@@ -8,6 +9,8 @@ import pytz
 from deepdiff import DeepDiff
 import datetime
 from urllib.parse import quote
+# Ross
+from urllib.parse import urlsplit, urlunsplit, urlencode
 
 import appdaemon.utils as utils
 from appdaemon.appdaemon import AppDaemon
@@ -572,7 +575,7 @@ class HassPlugin(PluginBase):
 
         return None
 
-    async def get_history_api(self, **kwargs):
+    async def get_history_api_orig(self, **kwargs):
 
         if "entity_id" in kwargs and kwargs["entity_id"] != "":
             filter_entity_id = "?filter_entity_id={}".format(kwargs["entity_id"])
@@ -633,6 +636,88 @@ class HassPlugin(PluginBase):
             end_time = ""
 
         return "{}/api/history/period{}{}{}".format(self.config["ha_url"], timestamp, filter_entity_id, end_time)
+        
+    async def get_history_api(self, **kwargs):
+        """
+        This replaces the original method for get_history_api.
+
+        I'm certain the old one doesn't work properly. Perhaps the HA functionality has changed.  At the very least, days=<> didn't work.
+        Also it seems like some of the limitations that were written into the AD function are no longer necessary. 
+        Here is a simplified version. 
+        Note - this is NOT fully tested.
+
+        entity_id: str (optional)
+        days: int (optional). Number of days of data to get, ending now.
+        start_time: date str (optional) - Can NOT have with "days".
+        end_time: date str (optional) - Default now.
+        """
+        query={}
+        entity_id = None
+        days = None
+        start_time = None
+        end_time = None         
+
+        kwargkeys = set(kwargs.keys())
+
+        if {"days", "start_time"} <= kwargkeys: 
+            raise ValueError(f'Can not have both days and start time. days: {kwargs["days"]} -- start_time: {kwargs["start_time"]}')
+
+        if "end_time" in kwargkeys and {"start_time", "days"}.isdisjoint(kwargkeys):
+            raise ValueError(f'Can not have end_time without start_time or days')
+
+        if "entity_id" in kwargs and kwargs["entity_id"] != "":            
+            entity_id = kwargs["entity_id"]
+
+        if "days" in kwargs:
+            days = kwargs["days"]
+            if days - 1 < 0:
+                days = 1
+ 
+        if "start_time" in kwargs:
+            if isinstance(kwargs["start_time"], str):
+                start_time = utils.str_to_dt(kwargs["start_time"]).replace(microsecond=0)
+            elif isinstance(kwargs["start_time"], datetime.datetime):
+                start_time = self.AD.tz.localize(kwargs["start_time"]).replace(microsecond=0)
+            else:
+                raise ValueError("Invalid type for start time")
+
+        if "end_time" in kwargs:
+            if isinstance(kwargs["end_time"], str):
+                end_time = utils.str_to_dt(kwargs["end_time"]).replace(microsecond=0)
+            elif isinstance(kwargs["end_time"], datetime.datetime):
+                end_time = self.AD.tz.localize(kwargs["end_time"]).replace(microsecond=0)
+            else:
+                raise ValueError("Invalid type for end time")
+
+        # end_time default - now
+        now = (await self.AD.sched.get_now()).replace(microsecond=0)
+        end_time = end_time if end_time else now
+
+        # Days: Calculate start_time (now-days) and end_time (now)
+        if days:
+            now = (await self.AD.sched.get_now()).replace(microsecond=0)
+            start_time = now - datetime.timedelta(days=days)
+            end_time = now
+
+        # Build the url
+        # /api/history/period/<start_time>?filter_entity_id=<entity_id>&end_time=<end_time>
+        apiurl = f'{self.config["ha_url"]}/api/history/period'
+
+        if start_time:
+            apiurl += "/" + utils.dt_to_str(start_time.replace(microsecond=0), self.AD.tz)
+
+        if entity_id or end_time:
+            if entity_id:
+                query["filter_entity_id"] = entity_id
+            if end_time:
+                query["end_time"] = end_time            
+            apiurl+= f'?{urlencode(query)}'
+        
+        orig_api_url = (await self.get_history_api_orig(**kwargs))
+        self.logger.info(f'HASSAPI - ORIG method: {orig_api_url}')
+        self.logger.info(f'HASSAPI - NEW  method: {apiurl}')
+
+        return apiurl        
 
     async def get_hass_state(self, entity_id=None):
 
