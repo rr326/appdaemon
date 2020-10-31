@@ -641,7 +641,7 @@ class HassPlugin(PluginBase):
         """
         This replaces the original method for get_history_api.
 
-        I'm certain the old one doesn't work properly. Perhaps the HA functionality has changed.  At the very least, days=<> didn't work.
+        I'm certain the old one doesn't work properly. Perhaps the HA functionality has changed.  At the very least, days=  didn't work.
         Also it seems like some of the limitations that were written into the AD function are no longer necessary. 
         Here is a simplified version. 
         Note - this is NOT fully tested.
@@ -665,29 +665,19 @@ class HassPlugin(PluginBase):
         if "end_time" in kwargkeys and {"start_time", "days"}.isdisjoint(kwargkeys):
             raise ValueError(f'Can not have end_time without start_time or days')
 
-        if "entity_id" in kwargs and kwargs["entity_id"] != "":            
-            entity_id = kwargs["entity_id"]
-
-        if "days" in kwargs:
-            days = kwargs["days"]
-            if days - 1 < 0:
-                days = 1
+        entity_id=kwargs.get("entity_id","").strip()
+        days = max(0, kwargs.get("days", 0))
  
-        if "start_time" in kwargs:
-            if isinstance(kwargs["start_time"], str):
-                start_time = utils.str_to_dt(kwargs["start_time"]).replace(microsecond=0)
-            elif isinstance(kwargs["start_time"], datetime.datetime):
-                start_time = self.AD.tz.localize(kwargs["start_time"]).replace(microsecond=0)
-            else:
-                raise ValueError("Invalid type for start time")
-
-        if "end_time" in kwargs:
-            if isinstance(kwargs["end_time"], str):
-                end_time = utils.str_to_dt(kwargs["end_time"]).replace(microsecond=0)
-            elif isinstance(kwargs["end_time"], datetime.datetime):
-                end_time = self.AD.tz.localize(kwargs["end_time"]).replace(microsecond=0)
-            else:
-                raise ValueError("Invalid type for end time")
+        def as_datetime(args, key):
+            if key in args:
+                if isinstance(args[key], str):
+                    return utils.str_to_dt(args(key)).replace(microsecond=0)
+                elif isinstance(args[key], datetime.datetime):
+                    return self.AD.tz.localize(args(key)).replace(microsecond=0)
+                else:
+                    raise ValueError(f"Invalid type for {key}")
+        start_time = as_datetime(kwargs, "start_time")        
+        end_time = as_datetime(kwargs, "end_time")
 
         # end_time default - now
         now = (await self.AD.sched.get_now()).replace(microsecond=0)
