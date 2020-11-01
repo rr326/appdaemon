@@ -49,6 +49,9 @@ class HassPlugin(PluginBase):
         self.hass_booting = False
 
         self.logger.info("HASS Plugin Initializing")
+        self.logger.info("#"*60)
+        self.logger.info("#### ROSS TODO: PR on hassplugin.get_history_api() ####")
+        self.logger.info("#"*60)
 
         self.name = name
 
@@ -704,8 +707,8 @@ class HassPlugin(PluginBase):
             apiurl+= f'?{urlencode(query)}'
         
         orig_api_url = (await self.get_history_api_orig(**kwargs))
-        self.logger.info(f'HASSAPI - ORIG method: {orig_api_url}')
-        self.logger.info(f'HASSAPI - NEW  method: {apiurl}')
+        self.logger.debug(f'HASSPLUGIN - ORIG method: {orig_api_url}')
+        self.logger.debug(f'HASSPLUGIN - NEW  method: {apiurl}')
 
         return apiurl        
 
