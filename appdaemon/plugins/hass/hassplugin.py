@@ -575,19 +575,6 @@ class HassPlugin(PluginBase):
         return None
        
     async def get_history_api(self, **kwargs):
-        """
-        This replaces the original method for get_history_api.
-
-        I'm certain the old one doesn't work properly. Perhaps the HA functionality has changed.  At the very least, days=  didn't work.
-        Also it seems like some of the limitations that were written into the AD function are no longer necessary. 
-        Here is a simplified version. 
-        Note - this is NOT fully tested.
-
-        entity_id: str (optional)
-        days: int (optional). Number of days of data to get, ending now.
-        start_time: date str (optional) - Can NOT have with "days".
-        end_time: date str (optional) - Default now.
-        """
         query={}
         entity_id = None
         days = None
