@@ -9,7 +9,6 @@ import pytz
 from deepdiff import DeepDiff
 import datetime
 from urllib.parse import quote
-# Ross
 from urllib.parse import urlsplit, urlunsplit, urlencode
 
 import appdaemon.utils as utils
@@ -49,9 +48,6 @@ class HassPlugin(PluginBase):
         self.hass_booting = False
 
         self.logger.info("HASS Plugin Initializing")
-        self.logger.info("#"*60)
-        self.logger.info("#### ROSS TODO: PR on hassplugin.get_history_api() ####")
-        self.logger.info("#"*60)
 
         self.name = name
 
