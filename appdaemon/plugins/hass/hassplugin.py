@@ -573,69 +573,7 @@ class HassPlugin(PluginBase):
             self.logger.error("-" * 60)
 
         return None
-
-    async def get_history_api_orig(self, **kwargs):
-
-        if "entity_id" in kwargs and kwargs["entity_id"] != "":
-            filter_entity_id = "?filter_entity_id={}".format(kwargs["entity_id"])
-        else:
-            filter_entity_id = ""
-        start_time = ""
-        end_time = ""
-        if "days" in kwargs:
-            days = kwargs["days"]
-            if days - 1 < 0:
-                days = 1
-        else:
-            days = 1
-        if "start_time" in kwargs:
-            if isinstance(kwargs["start_time"], str):
-                start_time = utils.str_to_dt(kwargs["start_time"]).replace(microsecond=0)
-            elif isinstance(kwargs["start_time"], datetime.datetime):
-                start_time = self.AD.tz.localize(kwargs["start_time"]).replace(microsecond=0)
-            else:
-                raise ValueError("Invalid type for start time")
-
-        if "end_time" in kwargs:
-            if isinstance(kwargs["end_time"], str):
-                end_time = utils.str_to_dt(kwargs["end_time"]).replace(microsecond=0)
-            elif isinstance(kwargs["end_time"], datetime.datetime):
-                end_time = self.AD.tz.localize(kwargs["end_time"]).replace(microsecond=0)
-            else:
-                raise ValueError("Invalid type for end time")
-
-        # if both are declared, it can't process entity_id
-        if start_time != "" and end_time != "":
-            filter_entity_id = ""
-
-        # if starttime is not declared and entity_id is declared, and days specified
-        elif (filter_entity_id != "" and start_time == "") and "days" in kwargs:
-            start_time = (await self.AD.sched.get_now()).replace(microsecond=0) - datetime.timedelta(days=days)
-
-        # if starttime is declared and entity_id is not declared, and days specified
-        elif filter_entity_id == "" and start_time != "" and end_time == "" and "days" in kwargs:
-            end_time = start_time + datetime.timedelta(days=days)
-
-        # if endtime is declared and entity_id is not declared, and days specified
-        elif filter_entity_id == "" and end_time != "" and start_time == "" and "days" in kwargs:
-            start_time = end_time - datetime.timedelta(days=days)
-
-        if start_time != "":
-            timestamp = "/{}".format(utils.dt_to_str(start_time.replace(microsecond=0), self.AD.tz))
-
-            if filter_entity_id != "":  # if entity_id is specified, end_time cannot be used
-                end_time = ""
-
-            if end_time != "":
-                end_time = "?end_time={}".format(quote(utils.dt_to_str(end_time.replace(microsecond=0), self.AD.tz)))
-
-        # if no start_time is specified, other parameters are invalid
-        else:
-            timestamp = ""
-            end_time = ""
-
-        return "{}/api/history/period{}{}{}".format(self.config["ha_url"], timestamp, filter_entity_id, end_time)
-        
+       
     async def get_history_api(self, **kwargs):
         """
         This replaces the original method for get_history_api.
