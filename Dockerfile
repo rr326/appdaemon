@@ -1,5 +1,8 @@
 FROM python:3.8-alpine
 
+# Ross - Upgrade pip
+RUN pip install --upgrade pip
+
 # Environment vars we can configure against
 # But these are optional, so we won't define them now
 #ENV HA_URL http://hass:8123
