@@ -1,4 +1,5 @@
-FROM python:3.8-alpine
+ARG IMAGE=python:3.8-alpine
+FROM ${IMAGE}
 
 # Ross - Upgrade pip
 RUN pip install --upgrade pip

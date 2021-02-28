@@ -92,12 +92,27 @@ class Scheduler:
         self.stopping = True
 
     async def cancel_timer(self, name, handle):
+        executed = False
         self.logger.debug("Canceling timer for %s", name)
-        if name in self.schedule and handle in self.schedule[name]:
+        if self.check_handle(name, handle):
             del self.schedule[name][handle]
             await self.AD.state.remove_entity("admin", "scheduler_callback.{}".format(handle))
+            executed = True
+
         if name in self.schedule and self.schedule[name] == {}:
             del self.schedule[name]
+
+        if not executed:
+            self.logger.warning("Invalid callback handle '{}' in cancel_timer() from app {}".format(handle, name))
+
+        return executed
+
+    def check_handle(self, name, handle):
+        """Check if the handler is valid"""
+        if name in self.schedule and handle in self.schedule[name]:
+            return True
+
+        return False
 
     # noinspection PyBroadException
     async def exec_schedule(self, name, args, uuid_):
@@ -107,6 +122,11 @@ class Scheduler:
                 #
                 # it's a "duration" entry
                 #
+
+                # first remove the duration parameter
+                if args["kwargs"].get("__duration"):
+                    del args["kwargs"]["__duration"]
+
                 executed = await self.AD.threading.dispatch_worker(
                     name,
                     {
@@ -586,7 +606,7 @@ class Scheduler:
         return self.next_sunrise() < self.next_sunset()
 
     async def info_timer(self, handle, name):
-        if name in self.schedule and handle in self.schedule[name]:
+        if self.check_handle(name, handle):
             callback = self.schedule[name][handle]
             return (
                 self.make_naive(callback["timestamp"]),

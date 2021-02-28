@@ -143,11 +143,13 @@ class AppManagement:
             init = getattr(self.objects[name]["object"], "initialize", None)
             if init is None:
                 self.logger.warning("Unable to find initialize() function in module %s - skipped", name)
+                self.objects[name]["running"] = False
                 await self.increase_inactive_apps(name)
                 return
         else:
             self.logger.warning("Unable to find module %s - initialize() skipped", name)
             await self.increase_inactive_apps(name)
+            self.objects[name]["running"] = False
             return
 
         # Call its initialize function
@@ -179,6 +181,7 @@ class AppManagement:
 
     async def terminate_app(self, name, delete=True):
         term = None
+        executed = True
         if name in self.objects and hasattr(self.objects[name]["object"], "terminate"):
             self.logger.info("Calling terminate() for {}".format(name))
 
@@ -195,6 +198,8 @@ class AppManagement:
 
             except TypeError:
                 self.AD.threading.report_callback_sig(name, "terminate", term, {})
+                executed = False
+
             except BaseException:
                 error_logger = logging.getLogger("Error.{}".format(name))
                 error_logger.warning("-" * 60)
@@ -207,12 +212,17 @@ class AppManagement:
                         "Logged an error to %s", self.AD.logging.get_filename("error_log"),
                     )
 
+                executed = False
+
         if delete:
             if name in self.objects:
                 del self.objects[name]
 
             if name in self.global_module_dependencies:
                 del self.global_module_dependencies[name]
+
+        else:
+            self.objects[name]["running"] = False
 
         await self.increase_inactive_apps(name)
 
@@ -232,7 +242,15 @@ class AppManagement:
         if self.AD.http is not None:
             await self.AD.http.terminate_app(name)
 
+        return executed
+
     async def start_app(self, app):
+
+        # first we check if running already
+        if app in self.objects and self.objects[app]["running"] is True:
+            self.logger.warning("Cannot start app %s, as it is already running", app)
+            return
+
         await self.init_object(app)
 
         if "disable" in self.app_config[app] and self.app_config[app]["disable"] is True:
@@ -241,9 +259,10 @@ class AppManagement:
             await self.initialize_app(app)
 
     async def stop_app(self, app, delete=True):
+        executed = False
         try:
             self.logger.info("Terminating %s", app)
-            await self.terminate_app(app, delete)
+            executed = await self.terminate_app(app, delete)
         except Exception:
             error_logger = logging.getLogger("Error.{}".format(app))
             error_logger.warning("-" * 60)
@@ -253,6 +272,8 @@ class AppManagement:
             error_logger.warning("-" * 60)
             if self.AD.logging.separate_error_log() is True:
                 self.logger.warning("Logged an error to %s", self.AD.logging.get_filename("error_log"))
+
+        return executed
 
     async def restart_app(self, app):
         await self.stop_app(app, delete=False)
@@ -311,6 +332,7 @@ class AppManagement:
                     "id": uuid.uuid4().hex,
                     "pin_app": self.AD.threading.app_should_be_pinned(name),
                     "pin_thread": pin,
+                    "running": True,
                 }
 
                 # load the module path into app entity
@@ -331,6 +353,7 @@ class AppManagement:
             "id": uuid.uuid4().hex,
             "pin_app": False,
             "pin_thread": -1,
+            "running": False,
         }
 
     async def read_config(self):  # noqa: C901
@@ -924,12 +947,13 @@ class AppManagement:
 
         # Terminate apps
 
+        apps_terminated = {}  # store apps properly terminated is any
         if apps is not None and apps["term"]:
-
             prio_apps = self.get_app_deps_and_prios(apps["term"], mode)
 
             for app in sorted(prio_apps, key=prio_apps.get, reverse=True):
-                await self.stop_app(app)
+                executed = await self.stop_app(app)
+                apps_terminated[app] = executed
 
         # Load/reload modules
 
@@ -967,7 +991,12 @@ class AppManagement:
                         await self.set_state(app, state="disabled")
                         await self.increase_inactive_apps(app)
                     else:
-                        await self.init_object(app)
+                        if apps_terminated.get(app, True) is True:  # the app terminated properly
+                            await self.init_object(app)
+
+                        else:
+                            self.logger.warning("Cannot initialize app %s, as it didn't terminate properly", app)
+
                 except Exception:
                     error_logger = logging.getLogger("Error.{}".format(app))
                     error_logger.warning("-" * 60)
@@ -988,7 +1017,11 @@ class AppManagement:
                 if "disable" in self.app_config[app] and self.app_config[app]["disable"] is True:
                     pass
                 else:
-                    await self.initialize_app(app)
+                    if apps_terminated.get(app, True) is True:  # the app terminated properly
+                        await self.initialize_app(app)
+
+                    else:
+                        self.logger.debug("Cannot initialize app %s, as it didn't terminate properly", app)
 
         if self.AD.check_app_updates_profile is True:
             pr.disable()
@@ -1340,16 +1373,16 @@ class AppManagement:
             return None
 
         if service == "start":
-            await self.start_app(app)
+            asyncio.ensure_future(self.start_app(app))
 
         elif service == "stop":
-            await self.stop_app(app, delete=False)
+            asyncio.ensure_future(self.stop_app(app, delete=False))
 
         elif service == "restart":
-            await self.restart_app(app)
+            asyncio.ensure_future(self.restart_app(app))
 
         elif service == "reload":
-            await self.check_app_updates(mode="init")
+            asyncio.ensure_future(self.check_app_updates(mode="init"))
 
         elif service in ["create", "edit", "remove", "enable", "disable"]:
             # first the check app updates needs to be stopped if on
