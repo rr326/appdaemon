@@ -1,4 +1,5 @@
-FROM python:3.8-alpine
+ARG IMAGE=python:3.8-alpine
+FROM ${IMAGE}
 
 # Ross - Upgrade pip
 RUN pip install --upgrade pip
@@ -25,9 +26,7 @@ COPY . .
 RUN apk add tzdata
 
 # Install dependencies
-# Ross Additional dependencies - line 2
-RUN apk add --no-cache gcc g++ libffi-dev musl-dev  \
-    libffi-dev libressl-dev python3-dev py-pip\ 
+RUN apk add --no-cache build-base gcc libffi-dev openssl-dev musl-dev cargo \
     && pip install --no-cache-dir .
 
 

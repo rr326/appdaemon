@@ -246,16 +246,9 @@ class HassPlugin(PluginBase):
     #
     # async def state(self, entity, attribute, old, new, kwargs):
     #    self.logger.info("State: %s %s %s %s {}".format(kwargs), entity, attribute, old, new)
-
-    async def event(self, event, data, kwargs):
-        self.logger.debug("Event: %s %s %s", kwargs, event, data)
-
-        if event == "service_registered":  # hass just registered a service
-            domain = data["domain"]
-            service = data["service"]
-            self.AD.services.register_service(
-                self.get_namespace(), domain, service, self.call_plugin_service, __silent=True
-            )
+    #
+    # async def event(self, event, data, kwargs):
+    #    self.logger.debug("Event: %s %s %s", kwargs, event, data)
 
     # async def schedule(self, kwargs):
     #    self.logger.info("Schedule: {}".format(kwargs))
@@ -275,7 +268,7 @@ class HassPlugin(PluginBase):
         # await self.AD.state.add_state_callback(self.name, self.namespace, None, self.state, {})
 
         # listen for service_registered event
-        await self.AD.events.add_event_callback(self.name, self.namespace, self.event, "service_registered")
+        # await self.AD.events.add_event_callback(self.name, self.namespace, self.event, "service_registered")
         # exec_time = await self.AD.sched.get_now() + datetime.timedelta(seconds=1)
         # await self.AD.sched.insert_schedule(
         #    self.name,
@@ -381,6 +374,16 @@ class HassPlugin(PluginBase):
                             await self.evaluate_started(False, self.hass_booting)
                     else:
                         await self.AD.events.process_event(self.namespace, result["event"])
+
+                        if result["event"].get("event_type") == "service_registered":
+                            data = result["event"]["data"]
+                            domain = data.get("domain")
+                            service = data.get("service")
+
+                            if domain and service:
+                                self.AD.services.register_service(
+                                    self.get_namespace(), domain, service, self.call_plugin_service, __silent=True
+                                )
 
                 self.reading_messages = False
 
@@ -574,23 +577,25 @@ class HassPlugin(PluginBase):
         return None
        
     async def get_history_api(self, **kwargs):
-        query={}
+        query = {}
         entity_id = None
         days = None
         start_time = None
-        end_time = None         
+        end_time = None
 
         kwargkeys = set(kwargs.keys())
 
-        if {"days", "start_time"} <= kwargkeys: 
-            raise ValueError(f'Can not have both days and start time. days: {kwargs["days"]} -- start_time: {kwargs["start_time"]}')
+        if {"days", "start_time"} <= kwargkeys:
+            raise ValueError(
+                f'Can not have both days and start time. days: {kwargs["days"]} -- start_time: {kwargs["start_time"]}'
+            )
 
         if "end_time" in kwargkeys and {"start_time", "days"}.isdisjoint(kwargkeys):
-            raise ValueError(f'Can not have end_time without start_time or days')
+            raise ValueError(f"Can not have end_time without start_time or days")
 
-        entity_id=kwargs.get("entity_id","").strip()
+        entity_id = kwargs.get("entity_id", "").strip()
         days = max(0, kwargs.get("days", 0))
- 
+
         def as_datetime(args, key):
             if key in args:
                 if isinstance(args[key], str):
@@ -599,7 +604,8 @@ class HassPlugin(PluginBase):
                     return self.AD.tz.localize(args(key)).replace(microsecond=0)
                 else:
                     raise ValueError(f"Invalid type for {key}")
-        start_time = as_datetime(kwargs, "start_time")        
+
+        start_time = as_datetime(kwargs, "start_time")
         end_time = as_datetime(kwargs, "end_time")
 
         # end_time default - now
@@ -623,10 +629,10 @@ class HassPlugin(PluginBase):
             if entity_id:
                 query["filter_entity_id"] = entity_id
             if end_time:
-                query["end_time"] = end_time            
-            apiurl+= f'?{urlencode(query)}'
+                query["end_time"] = end_time
+            apiurl += f"?{urlencode(query)}"
 
-        return apiurl        
+        return apiurl
 
     async def get_hass_state(self, entity_id=None):
 
