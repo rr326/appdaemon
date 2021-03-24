@@ -27,6 +27,7 @@ RUN apk add tzdata
 
 # Install dependencies
 RUN apk add --no-cache build-base gcc libffi-dev openssl-dev musl-dev cargo \
+    libressl-dev python3-dev py-pip\  
     && pip install --no-cache-dir .
 
 
